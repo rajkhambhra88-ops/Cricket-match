@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>IND vs PAK U-19 3D Cricket v3</title>
+<title>IND vs PAK U-19 3D Cricket v3.1</title>
 <style>
 :root{--gold:#ffd45a;--ink:#07131d;--panel:rgba(5,17,27,.9);--line:rgba(255,255,255,.18)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -62,7 +62,7 @@ h1{font-size:clamp(25px,6.5vw,40px);line-height:1.05;margin:9px 0}
 <button id="soundbtn">🔊</button>
 <div id="overlay">
  <div class="dialog" id="dialog">
-  <div class="logo">WORLD CRICKET • U-19 • v3</div>
+  <div class="logo">WORLD CRICKET • U-19 • v3.1</div>
   <h1>🇮🇳 INDIA<br><span style="color:#ffd45a">VS</span><br>🇵🇰 PAKISTAN</h1>
   <p><b>3D मोबाइल क्रिकेट मुकाबला</b><br>पूरा स्टेडियम • असली फील्डर • कैच और रन-आउट • स्टेडियम की आवाज़।<br>2 ओवर प्रति पारी • 3 विकेट</p>
   <button class="bigbtn" id="start">टॉस और मैच शुरू करें</button>
@@ -80,11 +80,11 @@ const $=id=>document.getElementById(id);
 // ============================================================
 let scene,camera,renderer,clock;
 let batter,bowler,batGroup,batBlade;
-let ballMesh,ballShadow;
+let ballMesh,ballGlow;
 let ballTrail=[];
-let fielders=[];        // 9 fielders
-let playersAll=[];       // all animated humans
-let stadium, crowdMeshes=[];
+let fielders=[];        
+let playersAll=[];      
+let crowdMeshes=[];
 let running=false,phase='menu',innings=0,batting=0;
 let score=[0,0],wickets=[0,0],balls=[0,0],target=0;
 let delivery=null, aim=0;
@@ -93,7 +93,6 @@ let lastToast=0;
 let postHit=false, postHitTime=0;
 let ballVel=new THREE.Vector3();
 let bowlerRunup=0;
-let chaseTargetHit=false;
 let soundOn=true;
 const MAX_BALLS=12, MAX_WICKETS=3;
 const TEAMS=[
@@ -124,7 +123,6 @@ function startCrowdAmbience(){
  crowdGain=audioCtx.createGain();
  crowdGain.gain.value=0.055;
  crowdGain.connect(audioCtx.destination);
- // layered noise via low-passed sawtooth + filter wobble = crowd murmur
  const masterF=crowdGain;
  for(let i=0;i<3;i++){
   const osc=audioCtx.createOscillator();
@@ -145,7 +143,6 @@ function startCrowdAmbience(){
 function setCrowdLevel(v){
  if(crowdGain) crowdGain.gain.value=Math.max(0,v);
 }
-// one-shot sound helpers
 function beep(freq,dur,vol,type){
  if(!audioCtx||!soundOn)return;
  const o=audioCtx.createOscillator(); const g=audioCtx.createGain();
@@ -157,7 +154,6 @@ function beep(freq,dur,vol,type){
 }
 function batHitSound(){
  if(!audioCtx||!soundOn)return;
- // sharp click
  const o=audioCtx.createOscillator();
  const g=audioCtx.createGain();
  o.type='square'; o.frequency.value=820+Math.random()*300;
@@ -190,7 +186,6 @@ function cyl(rt,rb,h,m,x,y,z,parent,seg){seg=seg||10;const o=new THREE.Mesh(new 
 function sphere(r,m,x,y,z,parent,seg){seg=seg||12;const o=new THREE.Mesh(new THREE.SphereGeometry(r,seg,Math.max(6,seg-2)),m);o.position.set(x,y,z);parent.add(o);return o;}
 function rand(a,b){return a+Math.random()*(b-a);}
 
-// ---- Realistic low-poly human: head with face, hair, arms, legs, shoes ----
 function makeHuman(shirtColor, pantColor, role){
  const g=new THREE.Group();
  const skin=mat(0xb87952,.75);
@@ -204,37 +199,25 @@ function makeHuman(shirtColor, pantColor, role){
  const gloveM=mat(0xdfe6ec,.5);
  const padM=mat(0xf3f0e2,.6);
 
- // ---- Torso (tapered) ----
  const torso=box(.58,.78,.32,cloth,0,1.18,0,g);
- // shoulder pads slightly
  box(.68,.10,.36,cloth,0,1.52,0,g);
 
- // ---- Head + face + hair ----
  const head=sphere(.19,skin,0,1.82,0,g,12);
- // eyes
  sphere(.028,mat(0x111111,.4),-.07,1.84,.17,g,6);
  sphere(.028,mat(0x111111,.4), .07,1.84,.17,g,6);
- // nose
  box(.04,.06,.04,skinDark,0,1.80,.19,g);
- // mouth
  box(.08,.015,.02,mat(0x7a3325,.6),0,1.75,.19,g);
- // ears
  sphere(.035,skin,-.19,1.82,0,g,6);
  sphere(.035,skin, .19,1.82,0,g,6);
- // hair (top only)
  sphere(.20,hairM,0,1.87,-.02,g,10);
 
  let armL,armR;
  if(role==='batter'){
-  // helmet
   const helm=sphere(.215,helmetM,0,1.85,0,g,10);
   helm.scale.set(1,.92,1.05);
-  // grille
   box(.32,.06,.06,mat(0xc8d0d6,.4),0,1.80,.21,g);
-  // pads on legs
   cyl(.11,.13,.72,padM,-.13,.36,0,g,8);
   cyl(.11,.13,.72,padM,.13,.36,0,g,8);
-  // gloves (batting)
   armL=cyl(.075,.085,.62,skin,-.31,1.15,0,g);
   armR=cyl(.075,.085,.62,skin,.31,1.15,0,g);
   sphere(.10,gloveM,-.31,.82,0,g,8);
@@ -242,20 +225,16 @@ function makeHuman(shirtColor, pantColor, role){
  }else if(role==='bowler'){
   armL=cyl(.075,.085,.62,skin,-.31,1.15,0,g);
   armR=cyl(.075,.085,.62,skin,.31,1.15,0,g);
-  // hands
   sphere(.09,skin,-.31,.82,0,g,8);
   sphere(.09,skin, .31,.82,0,g,8);
  }else{
-  // fielder — gloves on both hands
   armL=cyl(.075,.085,.62,skin,-.31,1.15,0,g);
   armR=cyl(.075,.085,.62,skin,.31,1.15,0,g);
   sphere(.095,gloveM,-.31,.82,0,g,8);
   sphere(.095,gloveM, .31,.82,0,g,8);
  }
- // legs
  const legL=cyl(.10,.13,.72,pant,-.13,.36,0,g,8);
  const legR=cyl(.10,.13,.72,pant,.13,.36,0,g,8);
- // shoes
  box(.17,.11,.32,shoeM,-.13,.055,.06,g);
  box(.17,.11,.32,shoeM,.13,.055,.06,g);
 
@@ -266,34 +245,28 @@ function makeHuman(shirtColor, pantColor, role){
 }
 
 // ============================================================
-// STADIUM (full ring + tiered stands + crowd texture via instancing)
+// STADIUM
 // ============================================================
 function buildStadium(){
- // --- Outfield ---
  const ground=new THREE.Mesh(new THREE.CircleGeometry(44,48),mat(0x287c43,.9));
  ground.rotation.x=-Math.PI/2; ground.position.y=-.06; ground.receiveShadow=true; scene.add(ground);
- // --- Inner ring (slightly lighter grass pattern) ---
  const inner=new THREE.Mesh(new THREE.RingGeometry(28,31,48),mat(0x2f8f4e,.9));
  inner.rotation.x=-Math.PI/2; inner.position.y=-.05; scene.add(inner);
 
- // --- Pitch ---
  box(7,.08,26,mat(0x9c8059,.9),0,.02,0).receiveShadow=true;
  box(3.2,.12,24,mat(0xc6a77a,.85),0,.09,0);
  for(const z of [-9.5,9.5]){
    box(4,.025,.12,mat(0xffffff,.6),0,.17,z);
    box(4,.02,.9,mat(0xffffff,.6),0,.155,z+(z<0?1.2:-1.2));
  }
- // stumps
  for(const z of [-9.8,9.8]){
    for(const x of [-.28,0,.28]) cyl(.055,.055,1.25,mat(0xf0e7ce,.5),x,.78,z,scene,8);
    box(.72,.06,.10,mat(0xf0e7ce,.5),0,1.42,z);
  }
 
- // --- Boundary rope ---
  const rope=new THREE.Mesh(new THREE.TorusGeometry(31,.13,6,80),mat(0xffffff,.8));
  rope.rotation.x=Math.PI/2; rope.position.y=.12; scene.add(rope);
 
- // --- Tiered stadium stands (3 tiers) ---
  const tierColors=[0x2c4f6a,0x284560,0x223c54];
  for(let t=0;t<3;t++){
   const R=32+t*3.2;
@@ -301,15 +274,13 @@ function buildStadium(){
   stand.position.y=(1.1+t*2.2);
   scene.add(stand);
  }
- // roof ring
  const roof=new THREE.Mesh(new THREE.TorusGeometry(41,.6,8,64),mat(0x1a2632,.7));
  roof.rotation.x=Math.PI/2; roof.position.y=11; scene.add(roof);
 
- // --- CROWD using instanced meshes: ~1500 small colored spheres in 2 tiers ---
  const crowdColors=[0xe35b4e,0xeeeeee,0x264c85,0xffd45a,0x59b06e,0xb05a9e,0x3d7dbb];
  const crowdCount=1500;
  const geo=new THREE.SphereGeometry(.16,6,4);
- const crowdMat=new THREE.MeshLambertMaterial({color:0xffffff,vertexColors:false});
+ const crowdMat=new THREE.MeshLambertMaterial({color:0xffffff});
  const inst=new THREE.InstancedMesh(geo,crowdMat,crowdCount);
  const dummy=new THREE.Object3D();
  const colorAttr=new THREE.InstancedBufferAttribute(new Float32Array(crowdCount*3),3);
@@ -329,7 +300,6 @@ function buildStadium(){
  scene.add(inst);
  crowdMeshes.push(inst);
 
- // --- Floodlight towers (4) ---
  const towerMat=mat(0x687985,.7);
  const lightMat=new THREE.MeshBasicMaterial({color:0xfff4d0});
  for(const x of [-1,1]) for(const z of [-1,1]){
@@ -337,12 +307,10 @@ function buildStadium(){
   cyl(.22,.30,20,towerMat,px,10,pz,scene,6);
   box(2.6,.5,1.1,lightMat,px,20,pz);
   box(2.6,.5,1.1,lightMat,px,18.6,pz);
-  // point light
   const pl=new THREE.PointLight(0xffeecc,0.5,45);
   pl.position.set(px,18,pz);
   scene.add(pl);
  }
- // Center spotlight feel
  scene.add(new THREE.DirectionalLight(0xfff2cc,0.6));
 }
 
@@ -377,18 +345,16 @@ function init(){
 
  buildStadium();
 
- // --- PLAYERS ---
  batter=makeHuman(TEAMS[0].shirt,TEAMS[0].pant,'batter');
  batter.position.set(0,0,8.3);
- batter.rotation.y=Math.PI; // faces bowler
+ batter.rotation.y=Math.PI; 
  batter.userData.homePos.copy(batter.position);
  batter.userData.homeRotY=Math.PI;
  scene.add(batter);
  playersAll.push(batter);
 
- // bat as child of batter
  batGroup=new THREE.Group();
- const handle=cyl(.03,.035,.34,mat(0x222222,.4),0,-.17,0,batGroup,6);
+ cyl(.03,.035,.34,mat(0x222222,.4),0,-.17,0,batGroup,6);
  batBlade=box(.12,1.0,.14,mat(0xd5b06a,.5),0,-.9,0,batGroup);
  batGroup.position.set(.42,1.35,.10);
  batter.add(batGroup);
@@ -399,7 +365,6 @@ function init(){
  scene.add(bowler);
  playersAll.push(bowler);
 
- // --- 9 FIELDERS from bowling side (PAK when IND bats) ---
  FIELD_POS.forEach((p,i)=>{
   const f=makeHuman(TEAMS[1].shirt,TEAMS[1].pant,'fielder');
   f.position.set(Math.sin(p.a)*p.r, 0, Math.cos(p.a)*p.r);
@@ -414,14 +379,12 @@ function init(){
   playersAll.push(f);
  });
 
- // --- Ball ---
  ballMesh=sphere(.22,mat(0xc91e2b,.4),0,.45,-9.4,scene,14);
  ballMesh.castShadow=true;
  ballGlow=new THREE.PointLight(0xff5544,0.35,3.5);
  ballGlow.position.y=.5;
  ballMesh.add(ballGlow);
 
- // trail pool
  for(let i=0;i<8;i++){
   const t=sphere(.09,mat(0xffffff,.3),0,0,0,scene,6);
   t.visible=false; ballTrail.push(t);
@@ -458,14 +421,13 @@ function updateAimLabel(){
 }
 
 // ============================================================
-// MATCH FLOW (Rules: 2 overs/side, 3 wickets max, 12 balls/side)
+// MATCH FLOW
 // ============================================================
 function startMatch(){
  initAudio();
  score=[0,0]; wickets=[0,0]; balls=[0,0];
  innings=0; batting=0; target=0;
  phase='ready'; running=true;
- chaseTargetHit=false;
  $('overlay').style.display='none';
  $('soundbtn').style.display='block';
  updateHUD();
@@ -479,26 +441,22 @@ function nextBall(){
  if(wickets[batting]>=MAX_WICKETS || balls[batting]>=MAX_BALLS){ endInnings(); return; }
  phase='ready'; delivery=null;
  swingRequested=false; defendRequested=false; postHit=false;
- ballsState = {t:0}; // reset
 
  ballMesh.position.set(0,.35,-9.4); ballMesh.visible=true;
  ballTrail.forEach(t=>t.visible=false);
- // reset bat swing
  batGroup.rotation.set(0,0,0);
 
- // reset bowler
  bowler.position.set(0,0,-9.4);
  bowler.rotation.set(0,0,0);
  bowler.userData.anim='idle';
 
- // reset fielders to home
  fielders.forEach(f=>{
    f.position.copy(f.userData.basePos);
    f.rotation.y=f.userData.homeRotY;
    f.userData.anim='idle';
+   f.userData.caught=false; // RESET CATCH FLAG
  });
 
- // reset batter pose
  batter.position.set(0,0,8.3);
  batter.rotation.set(0,Math.PI,0);
 
@@ -513,7 +471,7 @@ function bowl(){
 
  const pace = rand(.80,1.08);
  const line = rand(-1.30,1.30);
- const length = rand(1.0,2.6); // metres before stumps
+ const length = rand(1.0,2.6); 
  const bounceZ = -2 + length*0.35;
 
  delivery={
@@ -540,9 +498,6 @@ function requestDefend(){
  if(phase==='flight'){ defendRequested=true; batter.userData.anim='defend'; batter.userData.animT=0; }
 }
 
-// ============================================================
-// RESOLVE HIT — realistic cricket outcomes
-// ============================================================
 function resolveHit(){
  if(!delivery || delivery.hit) return;
  delivery.hit=true;
@@ -572,11 +527,10 @@ function resolveHit(){
 
  if(wicket){
    wickets[batting]++;
-   wicketsSound: wicketSound();
+   wicketSound();
    toast(outType==='CAUGHT'?'CAUGHT! कैच!':(outType==='LBW'?'LBW! OUT!':'OUT! बोल्ड!'));
    setStatus('WICKET', outType);
    if(outType==='CAUGHT'){
-     // celebratory fielder jumps
      fielders.forEach(f=>{ f.userData.anim='celebrate'; f.userData.animT=0; });
    }
  } else {
@@ -608,23 +562,23 @@ function launchBallAfterHit(runs, q){
  ballMesh.visible=true;
 }
 
-// ============================================================
-// INNINGS / MATCH
-// ============================================================
 function endInnings(){
  if(innings===0){
    target=score[0]+1; innings=1; batting=1;
    toast('INNINGS BREAK'); crowdCheer(1.2);
    updateHUD();
    setStatus('PAKISTAN CHASE','लक्ष्य '+target+' रन');
-   // swap fielders to IND colors for PAK batting
+   
+   // FIX: Swap fielder colors for the second innings
    fielders.forEach(f=>{
      f.children.forEach(c=>{
-       if(c.material && c.material.color && Math.abs(c.material.color.getHex()-TEAMS[1].shirt)<0x1000){
-         c.material.color.setHex(TEAMS[0].shirt);
+       if(c.material){
+         if(c.material.color.getHex() === TEAMS[1].shirt) c.material.color.setHex(TEAMS[0].shirt);
+         else if(c.material.color.getHex() === TEAMS[1].pant) c.material.color.setHex(TEAMS[0].pant);
        }
      });
    });
+   
    setTimeout(()=>{ nextBall(); }, 1500);
  } else finishMatch();
 }
@@ -650,7 +604,6 @@ function finishMatch(){
 // ============================================================
 // ANIMATION LOOP
 // ============================================================
-let ballsState={t:0};
 function animate(){
  requestAnimationFrame(animate);
  const dt=Math.min(clock.getDelta(),.04);
@@ -658,13 +611,11 @@ function animate(){
 
  if(lastToast>0){ lastToast-=dt; if(lastToast<=0)$('toast').style.opacity=0; }
 
- // ---- Player idle / walk / fielder animations ----
  playersAll.forEach(pl=>{
    const u=pl.userData;
    u.animT+=dt;
    const walk=Math.sin(u.animT*6)*0.08;
    if(u.anim==='runup'){
-     // bowler run-up + arm circle
      bowlerRunup=Math.min(1,bowlerRunup+dt*2.2);
      pl.position.z=-9.4+bowlerRunup*2.4;
      pl.position.x=Math.sin(bowlerRunup*Math.PI*2)*.18*(1-bowlerRunup);
@@ -673,8 +624,6 @@ function animate(){
      u.armR.rotation.x=-bowlerRunup*3.0;
      u.armL.rotation.x=bowlerRunup*0.8;
    }else if(u.anim==='swing'){
-     // batter swing arc
-     u.animT+=0; // already
      const s=Math.min(1,u.animT*3.5);
      batGroup.rotation.x=-s*1.8;
      batGroup.rotation.z=-s*.5;
@@ -686,7 +635,6 @@ function animate(){
      batGroup.rotation.x=-s*.4;
      u.armR.rotation.x=-s*.3;
    }else if(u.anim==='chase'){
-     // fielders running to ball
      u.legL.rotation.x=Math.sin(u.animT*14)*0.6;
      u.legR.rotation.x=-Math.sin(u.animT*14)*0.6;
      u.armL.rotation.x=-Math.sin(u.animT*14)*0.5;
@@ -696,7 +644,6 @@ function animate(){
      u.armL.rotation.x=-2.4;
      u.armR.rotation.x=-2.4;
    }else{
-     // idle: gentle sway
      u.legL.rotation.x=walk*.3;
      u.legR.rotation.x=-walk*.3;
      u.armL.rotation.x=Math.sin(now*2)*.1;
@@ -705,7 +652,6 @@ function animate(){
    }
  });
 
- // ---- BALL FLIGHT (pre-hit) ----
  if(delivery && phase==='flight' && !postHit){
    delivery.t+=dt;
    const p=Math.min(1, delivery.t/delivery.duration);
@@ -741,7 +687,6 @@ function animate(){
    if(p>=1){ delivery=null; $('timingbar').style.display='none'; ballTrail.forEach(t=>t.visible=false); }
  }
 
- // ---- POST-HIT BALL FLIGHT ----
  if(postHit){
    postHitTime+=dt;
    ballMesh.position.x += ballVel.x*dt;
@@ -749,18 +694,16 @@ function animate(){
    ballMesh.position.z += ballVel.z*dt;
    ballVel.y -= 18*dt;
 
-   // FIELDERS CHASE
    fielders.forEach(f=>{
      const dx=ballMesh.position.x-f.position.x;
      const dz=ballMesh.position.z-f.position.z;
      const d=Math.hypot(dx,dz);
-     if(d<10 && d>0.3){
+     if(d<10 && d>0.3 && !f.userData.caught){
        f.position.x += (dx/d)*dt*4.5;
        f.position.z += (dz/d)*dt*4.5;
        f.userData.anim='chase';
        f.rotation.y=Math.atan2(-(ballMesh.position.x-f.position.x),-(ballMesh.position.z-f.position.z));
      }
-     // catch detection
      if(d<0.9 && postHitTime>0.3 && !f.userData.caught){
        f.userData.caught=true;
        f.userData.anim='celebrate';
@@ -771,10 +714,7 @@ function animate(){
    if(postHitTime>1.6 || ballMesh.position.y<-2){ postHit=false; }
  }
 
- // ---- CROWD subtle sway ----
  crowdMeshes.forEach(m=>{ m.rotation.y=Math.sin(now*.15)*0.005; });
-
- // ---- CAMERA: gentle follow with slight bob ----
  camera.position.x=Math.sin(now*.25)*0.3;
  camera.lookAt(0,1.2,-1);
 
@@ -793,7 +733,6 @@ function bindControls(){
  $('left').addEventListener('pointerdown',e=>{e.preventDefault();uiClick();aim=Math.max(-1.5,aim-.5);toast('लेग साइड');updateAimLabel();},{passive:false});
  $('right').addEventListener('pointerdown',e=>{e.preventDefault();uiClick();aim=Math.min(1.5,aim+.5);toast('ऑफ साइड');updateAimLabel();},{passive:false});
 
- // sound toggle
  $('soundbtn').onclick=()=>{
    soundOn=!soundOn;
    $('soundbtn').textContent=soundOn?'🔊':'🔇';
@@ -804,7 +743,6 @@ function bindControls(){
    if(soundOn) initAudio();
  };
 
- // swipe on canvas
  let touchStartX=0,touchStartY=0,touchTime=0;
  const cv=renderer.domElement;
  cv.addEventListener('touchstart',e=>{
@@ -828,7 +766,6 @@ function bindControls(){
    }
  },{passive:true});
 
- // keyboard
  addEventListener('keydown',e=>{
    if(e.code==='Space'){e.preventDefault();requestHit();}
    if(e.code==='ArrowLeft'){aim=Math.max(-1.5,aim-.5);updateAimLabel();}
