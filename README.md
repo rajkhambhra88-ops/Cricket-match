@@ -1,2 +1,0 @@
-# Cricket-match
-Cricket Manoranjan
