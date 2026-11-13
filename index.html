@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>IND vs PAK U-19 3D Cricket v2</title>
+<title>IND vs PAK U-19 3D Cricket v3</title>
 <style>
 :root{--gold:#ffd45a;--ink:#07131d;--panel:rgba(5,17,27,.9);--line:rgba(255,255,255,.18)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -16,7 +16,7 @@ canvas{display:block;width:100%;height:100%}
 #scoreline{display:flex;justify-content:space-between;gap:8px;align-items:center;font-weight:900;font-size:clamp(13px,3.3vw,18px)}
 #scoreline .runs{font-size:clamp(22px,5.8vw,30px);color:var(--gold);white-space:nowrap}
 #meta{font-size:11px;color:#d3e1e9;margin-top:2px}
-#status{max-width:44%;font-size:11.5px;line-height:1.35;text-align:center}
+#status{max-width:46%;font-size:11.5px;line-height:1.35;text-align:center}
 #status strong{display:block;color:var(--gold);font-size:12.5px}
 #toast{position:fixed;top:22%;left:50%;transform:translate(-50%,-50%);font-weight:1000;font-size:clamp(24px,7.5vw,50px);text-shadow:0 4px 12px #000,0 0 22px #ffd45a55;pointer-events:none;opacity:0;transition:opacity .15s;text-align:center;white-space:nowrap;z-index:3}
 #timingbar{position:fixed;top:16%;left:50%;transform:translateX(-50%);width:min(320px,70vw);height:14px;background:#0008;border:1px solid #ffffff30;border-radius:8px;overflow:hidden;display:none;z-index:2}
@@ -27,6 +27,7 @@ canvas{display:block;width:100%;height:100%}
 .ctrl:active{transform:translateY(3px);box-shadow:0 2px 0 #06121b}
 #hit{min-width:112px;min-height:78px;border-radius:22px;background:linear-gradient(180deg,#ffcf55,#e58a12);color:#251600;border:1px solid #ffe6a0;font-size:17px}
 #hit small{display:block;font-size:10px;font-weight:800}
+#soundbtn{position:fixed;top:max(8px,env(safe-area-inset-top));right:8px;z-index:6;background:#0008;border:1px solid #ffffff30;border-radius:50%;width:44px;height:44px;font-size:18px;color:#fff;display:none}
 #overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;background:linear-gradient(180deg,#061521b8,#061521e8);z-index:5}
 .dialog{width:min(480px,100%);max-height:94vh;overflow:auto;background:rgba(7,24,37,.97);border:1px solid #ffffff30;border-radius:22px;padding:20px;text-align:center;box-shadow:0 20px 70px #0009}
 .logo{font-size:12px;letter-spacing:3px;color:var(--gold);font-weight:900}
@@ -58,13 +59,14 @@ h1{font-size:clamp(25px,6.5vw,40px);line-height:1.05;margin:9px 0}
  <button class="ctrl" id="hit">BAT<br><small>शॉट मारें</small></button>
  <button class="ctrl" id="right">▶<br>ऑफ</button>
 </div>
+<button id="soundbtn">🔊</button>
 <div id="overlay">
  <div class="dialog" id="dialog">
-  <div class="logo">WORLD CRICKET • U-19 • v2</div>
+  <div class="logo">WORLD CRICKET • U-19 • v3</div>
   <h1>🇮🇳 INDIA<br><span style="color:#ffd45a">VS</span><br>🇵🇰 PAKISTAN</h1>
-  <p><b>3D मोबाइल क्रिकेट मुकाबला</b><br>2 ओवर प्रति पारी • 3 विकेट • असली फिज़िक्स, फील्डर और कैच।<br>शॉट का सही समय चुनें, दिशा सेट करें।</p>
+  <p><b>3D मोबाइल क्रिकेट मुकाबला</b><br>पूरा स्टेडियम • असली फील्डर • कैच और रन-आउट • स्टेडियम की आवाज़।<br>2 ओवर प्रति पारी • 3 विकेट</p>
   <button class="bigbtn" id="start">टॉस और मैच शुरू करें</button>
-  <p style="font-size:11px;margin-bottom:0">लैंडस्केप सबसे अच्छा • टच और कीबोर्ड दोनों सपोर्टेड</p>
+  <p style="font-size:11px;margin-bottom:0">लैंडस्केप सबसे अच्छा • आवाज़ के लिए 🔊 बटन दबाएँ</p>
  </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
@@ -72,89 +74,290 @@ h1{font-size:clamp(25px,6.5vw,40px);line-height:1.05;margin:9px 0}
 (() => {
 "use strict";
 const $=id=>document.getElementById(id);
-// ---------- Global state ----------
+
+// ============================================================
+// GLOBAL STATE
+// ============================================================
 let scene,camera,renderer,clock;
-let batter,bowler,batGroup,batBlade,ballMesh,ballTrail=[],fielders=[];
-let ballGlow;
+let batter,bowler,batGroup,batBlade;
+let ballMesh,ballShadow;
+let ballTrail=[];
+let fielders=[];        // 9 fielders
+let playersAll=[];       // all animated humans
+let stadium, crowdMeshes=[];
 let running=false,phase='menu',innings=0,batting=0;
 let score=[0,0],wickets=[0,0],balls=[0,0],target=0;
-let delivery=null;
-let aim=0;                 // -1.5 (leg) .. +1.5 (off) relative to stumps
+let delivery=null, aim=0;
 let swingRequested=false, defendRequested=false, swingP=null;
 let lastToast=0;
-let ballVel=new THREE.Vector3();       // real velocity for post-hit physics
 let postHit=false, postHitTime=0;
+let ballVel=new THREE.Vector3();
+let bowlerRunup=0;
+let chaseTargetHit=false;
+let soundOn=true;
 const MAX_BALLS=12, MAX_WICKETS=3;
-const TEAMS=[{name:'INDIA U-19',flag:'🇮🇳',short:'IND',shirt:0x174b9a},{name:'PAKISTAN U-19',flag:'🇵🇰',short:'PAK',shirt:0x176c46}];
-// field positions (radius around ground, angles in radians from +Z)
-const FIELD_POS=[
- {a:0.00,r:22},  {a:0.55,r:26}, {a:-0.55,r:26},
- {a:1.15,r:24}, {a:-1.15,r:24}, {a:1.75,r:22},
- {a:-1.75,r:22}, {a:2.55,r:20}, {a:-2.55,r:20}
+const TEAMS=[
+ {name:'INDIA U-19',flag:'🇮🇳',short:'IND',shirt:0x174b9a,pant:0x0f2a5c},
+ {name:'PAKISTAN U-19',flag:'🇵🇰',short:'PAK',shirt:0x176c46,pant:0x0e3d28}
 ];
-// ---------- Utility ----------
+const FIELD_POS=[
+ {a:0.00,r:20},{a:0.55,r:24},{a:-0.55,r:24},
+ {a:1.15,r:22},{a:-1.15,r:22},{a:1.75,r:21},
+ {a:-1.75,r:21},{a:2.55,r:19},{a:-2.55,r:19}
+];
+
+// ============================================================
+// AUDIO ENGINE (WebAudio — no external files)
+// ============================================================
+let audioCtx=null;
+let crowdGain=null, crowdNodes=[];
+function initAudio(){
+ if(audioCtx)return;
+ try{
+  audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+  startCrowdAmbience();
+ }catch(e){console.warn('Audio unavailable',e);}
+}
+function startCrowdAmbience(){
+ if(!audioCtx||!soundOn)return;
+ if(crowdGain){crowdGain.gain.value=0.055;return;}
+ crowdGain=audioCtx.createGain();
+ crowdGain.gain.value=0.055;
+ crowdGain.connect(audioCtx.destination);
+ // layered noise via low-passed sawtooth + filter wobble = crowd murmur
+ const masterF=crowdGain;
+ for(let i=0;i<3;i++){
+  const osc=audioCtx.createOscillator();
+  osc.type='sawtooth';
+  osc.frequency.value=80+i*35+Math.random()*60;
+  const f=audioCtx.createBiquadFilter();
+  f.type='lowpass'; f.frequency.value=500+i*200; f.Q.value=1.2;
+  const g=audioCtx.createGain(); g.gain.value=0.35;
+  const lfo=audioCtx.createOscillator();
+  lfo.type='sine'; lfo.frequency.value=0.15+i*0.09;
+  const lfoG=audioCtx.createGain(); lfoG.gain.value=120;
+  lfo.connect(lfoG); lfoG.connect(f.frequency);
+  osc.connect(f); f.connect(g); g.connect(masterF);
+  osc.start(); lfo.start();
+  crowdNodes.push({osc,f,g,lfo});
+ }
+}
+function setCrowdLevel(v){
+ if(crowdGain) crowdGain.gain.value=Math.max(0,v);
+}
+// one-shot sound helpers
+function beep(freq,dur,vol,type){
+ if(!audioCtx||!soundOn)return;
+ const o=audioCtx.createOscillator(); const g=audioCtx.createGain();
+ o.type=type||'sine'; o.frequency.value=freq;
+ g.gain.setValueAtTime(vol,audioCtx.currentTime);
+ g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+dur);
+ o.connect(g); g.connect(audioCtx.destination);
+ o.start(); o.stop(audioCtx.currentTime+dur);
+}
+function batHitSound(){
+ if(!audioCtx||!soundOn)return;
+ // sharp click
+ const o=audioCtx.createOscillator();
+ const g=audioCtx.createGain();
+ o.type='square'; o.frequency.value=820+Math.random()*300;
+ g.gain.setValueAtTime(0.35,audioCtx.currentTime);
+ g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.12);
+ o.connect(g); g.connect(audioCtx.destination);
+ o.start(); o.stop(audioCtx.currentTime+0.12);
+}
+function crowdCheer(dur){
+ if(!audioCtx||!soundOn||!crowdGain)return;
+ const t=audioCtx.currentTime;
+ crowdGain.gain.cancelScheduledValues(t);
+ crowdGain.gain.setValueAtTime(0.055,t);
+ crowdGain.gain.linearRampToValueAtTime(0.45,t+0.15);
+ crowdGain.gain.exponentialRampToValueAtTime(0.055,t+dur);
+}
+function wicketSound(){
+ if(!audioCtx||!soundOn)return;
+ beep(180,0.35,0.35,'triangle');
+ setTimeout(()=>beep(120,0.4,0.3,'triangle'),120);
+}
+function uiClick(){ if(!audioCtx||!soundOn)return; beep(660,0.05,0.12,'sine'); }
+
+// ============================================================
+// MATERIALS & HUMAN MODEL FACTORY
+// ============================================================
 const mat=(c,r=.75)=>new THREE.MeshStandardMaterial({color:c,roughness:r});
-function box(w,h,d,m,x,y,z,parent=scene){const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);o.position.set(x,y,z);parent.add(o);return o;}
-function cyl(rt,rb,h,m,x,y,z,parent=scene,seg=12){const o=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg),m);o.position.set(x,y,z);parent.add(o);return o;}
-function sphere(r,m,x,y,z,parent=scene,seg=12){const o=new THREE.Mesh(new THREE.SphereGeometry(r,seg,Math.max(8,seg-2)),m);o.position.set(x,y,z);parent.add(o);return o;}
+function box(w,h,d,m,x,y,z,parent){const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);o.position.set(x,y,z);parent.add(o);return o;}
+function cyl(rt,rb,h,m,x,y,z,parent,seg){seg=seg||10;const o=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg),m);o.position.set(x,y,z);parent.add(o);return o;}
+function sphere(r,m,x,y,z,parent,seg){seg=seg||12;const o=new THREE.Mesh(new THREE.SphereGeometry(r,seg,Math.max(6,seg-2)),m);o.position.set(x,y,z);parent.add(o);return o;}
 function rand(a,b){return a+Math.random()*(b-a);}
-// ---------- Player factory: richer, low-poly humanoid ----------
-function makePlayer(x,z,shirt,role){
- const g=new THREE.Group();g.position.set(x,0,z);scene.add(g);
- const skin=mat(0xb87952,.7);
- const cloth=mat(shirt,.65);
- const dark=mat(0x17212a,.7);
- const white=mat(0xf0f0f0,.65);
- // torso (slightly tapered box for shoulders)
- const torso=box(.58,.72,.32,cloth,0,1.22,0,g);
- // head + helmet
- const head=sphere(.2,skin,0,1.78,0,g,10);
- if(role==='batter'){
-   const helm=sphere(.225,mat(0x1b2b4a,.5),0,1.80,0,g,10);
-   helm.scale.set(1,.9,1.05);
-   box(.30,.04,.10,mat(0xe6e6e6,.4),0,1.79,.19,g); // grille
- }
- // arms
- const armL=cyl(.075,.085,.6,skin,-.31,1.2,0,g);
- const armR=cyl(.075,.085,.6,skin,.31,1.2,0,g);
- if(role==='batter'){
-   // pads on legs
-   cyl(.11,.13,.7,white,-.13,.36,0,g);
-   cyl(.11,.13,.7,white,.13,.36,0,g);
-   // shoes
-   box(.16,.10,.30,dark,-.13,.06,.06,g);
-   box(.16,.10,.30,dark,.13,.06,.06,g);
- }else{
-   cyl(.095,.12,.72,dark,-.12,.38,0,g);
-   cyl(.095,.12,.72,dark,.12,.38,0,g);
- }
- // Store limb refs for animation
- g.userData={
-   role,
-   torso, head,
-   armL, armR,
-   legL:g.children.find(c=>c.geometry&&c.geometry.parameters&&c.geometry.parameters.height===0.7&&c.position.x<0&&c.position.y<0.6)||null
- };
- return g;
-}
-// ---------- Bat (child of batter so it follows animation) ----------
-function makeBat(){
+
+// ---- Realistic low-poly human: head with face, hair, arms, legs, shoes ----
+function makeHuman(shirtColor, pantColor, role){
  const g=new THREE.Group();
- const handle=cyl(.03,.035,.35,mat(0x222222,.4),0,-.17,0,g);
- const blade=box(.12,1.0,.14,mat(0xd5b06a,.5),0,-.9,0,g);
- blade.rotation.z=0;
- g.position.set(.42,1.35,.10); // near hands
+ const skin=mat(0xb87952,.75);
+ const skinDark=mat(0x9a6442,.75);
+ const cloth=mat(shirtColor,.68);
+ const pant=mat(pantColor,.7);
+ const shoeM=mat(0x111418,.5);
+ const white=mat(0xf0f0f0,.6);
+ const hairM=mat(0x1a1410,.9);
+ const helmetM=mat(0x15243f,.45);
+ const gloveM=mat(0xdfe6ec,.5);
+ const padM=mat(0xf3f0e2,.6);
+
+ // ---- Torso (tapered) ----
+ const torso=box(.58,.78,.32,cloth,0,1.18,0,g);
+ // shoulder pads slightly
+ box(.68,.10,.36,cloth,0,1.52,0,g);
+
+ // ---- Head + face + hair ----
+ const head=sphere(.19,skin,0,1.82,0,g,12);
+ // eyes
+ sphere(.028,mat(0x111111,.4),-.07,1.84,.17,g,6);
+ sphere(.028,mat(0x111111,.4), .07,1.84,.17,g,6);
+ // nose
+ box(.04,.06,.04,skinDark,0,1.80,.19,g);
+ // mouth
+ box(.08,.015,.02,mat(0x7a3325,.6),0,1.75,.19,g);
+ // ears
+ sphere(.035,skin,-.19,1.82,0,g,6);
+ sphere(.035,skin, .19,1.82,0,g,6);
+ // hair (top only)
+ sphere(.20,hairM,0,1.87,-.02,g,10);
+
+ let armL,armR;
+ if(role==='batter'){
+  // helmet
+  const helm=sphere(.215,helmetM,0,1.85,0,g,10);
+  helm.scale.set(1,.92,1.05);
+  // grille
+  box(.32,.06,.06,mat(0xc8d0d6,.4),0,1.80,.21,g);
+  // pads on legs
+  cyl(.11,.13,.72,padM,-.13,.36,0,g,8);
+  cyl(.11,.13,.72,padM,.13,.36,0,g,8);
+  // gloves (batting)
+  armL=cyl(.075,.085,.62,skin,-.31,1.15,0,g);
+  armR=cyl(.075,.085,.62,skin,.31,1.15,0,g);
+  sphere(.10,gloveM,-.31,.82,0,g,8);
+  sphere(.10,gloveM, .31,.82,0,g,8);
+ }else if(role==='bowler'){
+  armL=cyl(.075,.085,.62,skin,-.31,1.15,0,g);
+  armR=cyl(.075,.085,.62,skin,.31,1.15,0,g);
+  // hands
+  sphere(.09,skin,-.31,.82,0,g,8);
+  sphere(.09,skin, .31,.82,0,g,8);
+ }else{
+  // fielder — gloves on both hands
+  armL=cyl(.075,.085,.62,skin,-.31,1.15,0,g);
+  armR=cyl(.075,.085,.62,skin,.31,1.15,0,g);
+  sphere(.095,gloveM,-.31,.82,0,g,8);
+  sphere(.095,gloveM, .31,.82,0,g,8);
+ }
+ // legs
+ const legL=cyl(.10,.13,.72,pant,-.13,.36,0,g,8);
+ const legR=cyl(.10,.13,.72,pant,.13,.36,0,g,8);
+ // shoes
+ box(.17,.11,.32,shoeM,-.13,.055,.06,g);
+ box(.17,.11,.32,shoeM,.13,.055,.06,g);
+
+ g.userData={role, armL, armR, legL, legR, torso, head,
+   baseY:0, anim:'idle', animT:0,
+   homePos:new THREE.Vector3(), homeRotY:0 };
  return g;
 }
-// ---------- Init ----------
+
+// ============================================================
+// STADIUM (full ring + tiered stands + crowd texture via instancing)
+// ============================================================
+function buildStadium(){
+ // --- Outfield ---
+ const ground=new THREE.Mesh(new THREE.CircleGeometry(44,48),mat(0x287c43,.9));
+ ground.rotation.x=-Math.PI/2; ground.position.y=-.06; ground.receiveShadow=true; scene.add(ground);
+ // --- Inner ring (slightly lighter grass pattern) ---
+ const inner=new THREE.Mesh(new THREE.RingGeometry(28,31,48),mat(0x2f8f4e,.9));
+ inner.rotation.x=-Math.PI/2; inner.position.y=-.05; scene.add(inner);
+
+ // --- Pitch ---
+ box(7,.08,26,mat(0x9c8059,.9),0,.02,0).receiveShadow=true;
+ box(3.2,.12,24,mat(0xc6a77a,.85),0,.09,0);
+ for(const z of [-9.5,9.5]){
+   box(4,.025,.12,mat(0xffffff,.6),0,.17,z);
+   box(4,.02,.9,mat(0xffffff,.6),0,.155,z+(z<0?1.2:-1.2));
+ }
+ // stumps
+ for(const z of [-9.8,9.8]){
+   for(const x of [-.28,0,.28]) cyl(.055,.055,1.25,mat(0xf0e7ce,.5),x,.78,z,scene,8);
+   box(.72,.06,.10,mat(0xf0e7ce,.5),0,1.42,z);
+ }
+
+ // --- Boundary rope ---
+ const rope=new THREE.Mesh(new THREE.TorusGeometry(31,.13,6,80),mat(0xffffff,.8));
+ rope.rotation.x=Math.PI/2; rope.position.y=.12; scene.add(rope);
+
+ // --- Tiered stadium stands (3 tiers) ---
+ const tierColors=[0x2c4f6a,0x284560,0x223c54];
+ for(let t=0;t<3;t++){
+  const R=32+t*3.2;
+  const stand=new THREE.Mesh(new THREE.CylinderGeometry(R,R,2.2+t*1.5,64,1,true),mat(tierColors[t],.9));
+  stand.position.y=(1.1+t*2.2);
+  scene.add(stand);
+ }
+ // roof ring
+ const roof=new THREE.Mesh(new THREE.TorusGeometry(41,.6,8,64),mat(0x1a2632,.7));
+ roof.rotation.x=Math.PI/2; roof.position.y=11; scene.add(roof);
+
+ // --- CROWD using instanced meshes: ~1500 small colored spheres in 2 tiers ---
+ const crowdColors=[0xe35b4e,0xeeeeee,0x264c85,0xffd45a,0x59b06e,0xb05a9e,0x3d7dbb];
+ const crowdCount=1500;
+ const geo=new THREE.SphereGeometry(.16,6,4);
+ const crowdMat=new THREE.MeshLambertMaterial({color:0xffffff,vertexColors:false});
+ const inst=new THREE.InstancedMesh(geo,crowdMat,crowdCount);
+ const dummy=new THREE.Object3D();
+ const colorAttr=new THREE.InstancedBufferAttribute(new Float32Array(crowdCount*3),3);
+ for(let i=0;i<crowdCount;i++){
+  const tier=i%3;
+  const R=32.6+tier*3.1;
+  const a=Math.random()*Math.PI*2;
+  const y=2.4+tier*2.2+Math.random()*0.6;
+  dummy.position.set(Math.cos(a)*R,y,Math.sin(a)*R);
+  dummy.updateMatrix();
+  inst.setMatrixAt(i,dummy.matrix);
+  const c=new THREE.Color(crowdColors[i%crowdColors.length]);
+  colorAttr.setXYZ(i,c.r,c.g,c.b);
+ }
+ inst.instanceColor=colorAttr;
+ inst.instanceColor.needsUpdate=true;
+ scene.add(inst);
+ crowdMeshes.push(inst);
+
+ // --- Floodlight towers (4) ---
+ const towerMat=mat(0x687985,.7);
+ const lightMat=new THREE.MeshBasicMaterial({color:0xfff4d0});
+ for(const x of [-1,1]) for(const z of [-1,1]){
+  const px=x*40, pz=z*40;
+  cyl(.22,.30,20,towerMat,px,10,pz,scene,6);
+  box(2.6,.5,1.1,lightMat,px,20,pz);
+  box(2.6,.5,1.1,lightMat,px,18.6,pz);
+  // point light
+  const pl=new THREE.PointLight(0xffeecc,0.5,45);
+  pl.position.set(px,18,pz);
+  scene.add(pl);
+ }
+ // Center spotlight feel
+ scene.add(new THREE.DirectionalLight(0xfff2cc,0.6));
+}
+
+// ============================================================
+// INIT
+// ============================================================
 function init(){
  const host=$('game');
  scene=new THREE.Scene();
  scene.background=new THREE.Color(0x78b7d7);
- scene.fog=new THREE.Fog(0x78b7d7,42,110);
- camera=new THREE.PerspectiveCamera(48,innerWidth/innerHeight,.1,180);
- camera.position.set(0,10.5,20);
- camera.lookAt(0,0,-2);
+ scene.fog=new THREE.Fog(0x78b7d7,55,140);
+ camera=new THREE.PerspectiveCamera(50,innerWidth/innerHeight,.1,220);
+ camera.position.set(0,9.5,20);
+ camera.lookAt(0,1,-2);
+
  renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
  renderer.setPixelRatio(Math.min(devicePixelRatio,1.7));
  renderer.setSize(innerWidth,innerHeight);
@@ -162,87 +365,66 @@ function init(){
  renderer.shadowMap.type=THREE.PCFSoftShadowMap;
  host.appendChild(renderer.domElement);
 
- scene.add(new THREE.HemisphereLight(0xeaf8ff,0x35512e,1.8));
- const sun=new THREE.DirectionalLight(0xffffff,1.9);
- sun.position.set(-10,20,14);
+ scene.add(new THREE.HemisphereLight(0xeaf8ff,0x35512e,1.6));
+ const sun=new THREE.DirectionalLight(0xffffff,1.8);
+ sun.position.set(-12,22,15);
  sun.castShadow=true;
  sun.shadow.mapSize.set(1024,1024);
- sun.shadow.camera.left=-30; sun.shadow.camera.right=30;
- sun.shadow.camera.top=30; sun.shadow.camera.bottom=-30;
- sun.shadow.camera.far=70;
+ sun.shadow.camera.left=-28; sun.shadow.camera.right=28;
+ sun.shadow.camera.top=28; sun.shadow.camera.bottom=-28;
+ sun.shadow.camera.far=80;
  scene.add(sun);
 
- // ground / outfield
- const ground=new THREE.Mesh(new THREE.CircleGeometry(42,48),mat(0x287c43,.9));
- ground.rotation.x=-Math.PI/2; ground.position.y=-.06; ground.receiveShadow=true; scene.add(ground);
- const outer=new THREE.Mesh(new THREE.RingGeometry(31,39,48),mat(0x9aadb3,.95));
- outer.rotation.x=-Math.PI/2; outer.position.y=.02; scene.add(outer);
+ buildStadium();
 
- // simple stadium ring
- for(let i=0;i<40;i++){
-   const a=i*Math.PI*2/40;
-   const s=box(1.4,2.0,.7,mat(i%2?0x294c66:0x355e7c,.85),Math.cos(a)*36,1,Math.sin(a)*36);
-   s.lookAt(0,1,0);
- }
- // crowd dots (sparse for perf)
- for(let i=0;i<180;i++){
-   const a=Math.random()*Math.PI*2, r=32+Math.random()*5;
-   sphere(.12,mat([0xe7d5b5,0xe35b4e,0xeeeeee,0x264c85][i%4]),Math.cos(a)*r,1.5+Math.random()*1.3,Math.sin(a)*r,scene,6);
- }
-
- // pitch
- box(7,.08,26,mat(0x9c8059,.9),0,.02,0).receiveShadow=true;
- box(3.2,.12,24,mat(0xc6a77a,.85),0,.09,0);
- // creases
- for(const z of [-9.5,9.5]){
-   box(4,.025,.12,mat(0xffffff,.6),0,.17,z);
-   // returning crease
-   box(4,.02,.9,mat(0xffffff,.6),0,.155,z+(z<0?1.2:-1.2));
- }
- // stumps both ends
- for(const z of [-9.8,9.8]){
-   for(const x of [-.28,0,.28]) cyl(.055,.055,1.25,mat(0xf0e7ce,.5),x,.78,z,scene,8);
-   box(.72,.06,.10,mat(0xf0e7ce,.5),0,1.42,z);
- }
- // boundary rope
- const rope=new THREE.Mesh(new THREE.TorusGeometry(31,.13,6,80),mat(0xffffff,.8));
- rope.rotation.x=Math.PI/2; rope.position.y=.12; scene.add(rope);
- // floodlights
- for(const x of [-1,1]) for(const z of [-1,1]){
-   const px=x*27,pz=z*27;
-   cyl(.18,.25,17,mat(0x687985,.7),px,8.5,pz,scene,6);
-   box(2.2,.4,.9,mat(0xeaf5ff,.5),px,17,pz);
- }
-
- // PLAYERS
- batter=makePlayer(0,8.3,TEAMS[0].shirt,'batter');
+ // --- PLAYERS ---
+ batter=makeHuman(TEAMS[0].shirt,TEAMS[0].pant,'batter');
+ batter.position.set(0,0,8.3);
  batter.rotation.y=Math.PI; // faces bowler
- bowler=makePlayer(0,-9.2,TEAMS[1].shirt,'bowler');
+ batter.userData.homePos.copy(batter.position);
+ batter.userData.homeRotY=Math.PI;
+ scene.add(batter);
+ playersAll.push(batter);
 
- // bat (attached to batter so it moves with pose)
- batGroup=makeBat();
+ // bat as child of batter
+ batGroup=new THREE.Group();
+ const handle=cyl(.03,.035,.34,mat(0x222222,.4),0,-.17,0,batGroup,6);
+ batBlade=box(.12,1.0,.14,mat(0xd5b06a,.5),0,-.9,0,batGroup);
+ batGroup.position.set(.42,1.35,.10);
  batter.add(batGroup);
- batBlade=batGroup.children[1];
 
- // fielders around ground
+ bowler=makeHuman(TEAMS[1].shirt,TEAMS[1].pant,'bowler');
+ bowler.position.set(0,0,-9.4);
+ bowler.userData.homePos.set(0,0,-9.4);
+ scene.add(bowler);
+ playersAll.push(bowler);
+
+ // --- 9 FIELDERS from bowling side (PAK when IND bats) ---
  FIELD_POS.forEach((p,i)=>{
-   const shirt = i===4 ? TEAMS[1].shirt : TEAMS[0].shirt; // most are bowling side PAK
-   const f = makePlayer(Math.sin(p.a)*p.r, Math.cos(p.a)*p.r, TEAMS[1].shirt, 'fielder');
-   f.rotation.y = Math.atan2(-f.position.x,-f.position.z);
-   f.userData.basePos = f.position.clone();
-   f.userData.homeAngle = p.a;
-   f.userData.homeR = p.r;
-   fielders.push(f);
+  const f=makeHuman(TEAMS[1].shirt,TEAMS[1].pant,'fielder');
+  f.position.set(Math.sin(p.a)*p.r, 0, Math.cos(p.a)*p.r);
+  f.rotation.y=Math.atan2(-f.position.x,-f.position.z);
+  f.userData.homePos.copy(f.position);
+  f.userData.homeRotY=f.rotation.y;
+  f.userData.basePos=f.position.clone();
+  f.userData.homeAngle=p.a;
+  f.userData.homeR=p.r;
+  scene.add(f);
+  fielders.push(f);
+  playersAll.push(f);
  });
 
- // ball
- ballMesh=sphere(.22,mat(0xc91e2b,.4),0,.45,-9.2,scene,14);
+ // --- Ball ---
+ ballMesh=sphere(.22,mat(0xc91e2b,.4),0,.45,-9.4,scene,14);
  ballMesh.castShadow=true;
- ballGlow=new THREE.PointLight(0xff5544,0.4,4); ballGlow.position.y=.5; ballMesh.add(ballGlow);
- // trail spheres (pooled)
+ ballGlow=new THREE.PointLight(0xff5544,0.35,3.5);
+ ballGlow.position.y=.5;
+ ballMesh.add(ballGlow);
+
+ // trail pool
  for(let i=0;i<8;i++){
-   const t=sphere(.10,mat(0xffffff,.3),0,0,0,scene,6);
-   t.visible=false; ballTrail.push(t);
+  const t=sphere(.09,mat(0xffffff,.3),0,0,0,scene,6);
+  t.visible=false; ballTrail.push(t);
  }
 
  clock=new THREE.Clock();
@@ -250,102 +432,128 @@ function init(){
  bindControls();
  animate();
 }
+
 function resize(){
  if(!renderer)return;
  camera.aspect=innerWidth/innerHeight;
  camera.updateProjectionMatrix();
  renderer.setSize(innerWidth,innerHeight);
 }
-// ---------- HUD ----------
-function toast(t){$('toast').textContent=t;$('toast').style.opacity=1;lastToast=1.1;}
+
+// ============================================================
+// HUD
+// ============================================================
+function toast(t){$('toast').textContent=t;$('toast').style.opacity=1;lastToast=1.2;}
 function updateHUD(){
  const i=batting;
  $('batteam').textContent=TEAMS[i].flag+' '+TEAMS[i].name;
  $('runs').textContent=score[i]+'/'+wickets[i];
  $('overs').textContent=Math.floor(balls[i]/6)+'.'+(balls[i]%6)+' overs';
- $('target').textContent = innings===1 ? 'Target '+target : '2 overs';
+ $('target').textContent=innings===1?('Target '+target):'2 overs';
 }
 function setStatus(a,b){$('phase').textContent=a;$('msg').textContent=b;}
 function updateAimLabel(){
  const l=Math.abs(aim)<.2?'CENTER':(aim<0?'LEG':'OFF');
  $('aimindicator').textContent='दिशा: '+l+' ('+aim.toFixed(1)+')';
 }
-// ---------- Match flow ----------
+
+// ============================================================
+// MATCH FLOW (Rules: 2 overs/side, 3 wickets max, 12 balls/side)
+// ============================================================
 function startMatch(){
+ initAudio();
  score=[0,0]; wickets=[0,0]; balls=[0,0];
  innings=0; batting=0; target=0;
  phase='ready'; running=true;
+ chaseTargetHit=false;
  $('overlay').style.display='none';
+ $('soundbtn').style.display='block';
  updateHUD();
+ setCrowdLevel(0.06);
  setStatus('INDIA BATTING','गेंदबाज तैयार हो रहा है');
  setTimeout(nextBall,700);
 }
+
 function nextBall(){
  if(!running)return;
  if(wickets[batting]>=MAX_WICKETS || balls[batting]>=MAX_BALLS){ endInnings(); return; }
- phase='ready'; delivery=null; swingRequested=false; defendRequested=false; postHit=false;
- ballMesh.position.set(0,.35,-9.2); ballMesh.visible=true;
- batGroup.rotation.set(0,0,0); batGroup.position.set(.42,1.35,.10);
+ phase='ready'; delivery=null;
+ swingRequested=false; defendRequested=false; postHit=false;
+ ballsState = {t:0}; // reset
+
+ ballMesh.position.set(0,.35,-9.4); ballMesh.visible=true;
  ballTrail.forEach(t=>t.visible=false);
+ // reset bat swing
+ batGroup.rotation.set(0,0,0);
+
  // reset bowler
- bowler.position.set(0,0,-9.2);
- bowler.rotation.y=0;
- // reset fielders
- fielders.forEach((f,i)=>{ f.position.copy(f.userData.basePos); f.rotation.y=Math.atan2(-f.position.x,-f.position.z); });
+ bowler.position.set(0,0,-9.4);
+ bowler.rotation.set(0,0,0);
+ bowler.userData.anim='idle';
+
+ // reset fielders to home
+ fielders.forEach(f=>{
+   f.position.copy(f.userData.basePos);
+   f.rotation.y=f.userData.homeRotY;
+   f.userData.anim='idle';
+ });
+
  // reset batter pose
- batter.rotation.set(0,Math.PI,0);
  batter.position.set(0,0,8.3);
+ batter.rotation.set(0,Math.PI,0);
+
  setStatus('NEXT BALL',`${TEAMS[batting].short} बल्लेबाजी • BAT का सही समय चुनें`);
- setTimeout(()=>{ if(running && phase==='ready') bowl(); }, 750);
+ setTimeout(()=>{ if(running && phase==='ready') bowl(); }, 800);
 }
+
 function bowl(){
- phase='flight'; swingRequested=false; defendRequested=false; swingP=null;
- const pace = rand(.78,1.05);
- const line = rand(-1.35,1.35);
- const length = rand(1.2,2.5); // metres ahead of stumps at bounce
- const targetBounceZ = -2 + length*0.35;
+ phase='flight';
+ swingRequested=false; defendRequested=false; swingP=null;
+ bowlerRunup=0;
+
+ const pace = rand(.80,1.08);
+ const line = rand(-1.30,1.30);
+ const length = rand(1.0,2.6); // metres before stumps
+ const bounceZ = -2 + length*0.35;
+
  delivery={
-   t:0,
-   duration: 1.35/pace,
-   line, length,
-   bounceZ: targetBounceZ,
-   hit:false, bounced:false,
-   // Precompute trajectory: linear z, y drops then bounces once
-   zStart:-9.2, zEnd:9.8,
+   t:0, duration: 1.35/pace,
+   line, bounceZ,
+   hit:false,
+   zStart:-9.4, zEnd:9.8,
    yStart:.55,
  };
+ bowler.userData.anim='runup';
  setStatus('BALL IN PLAY','गेंद आ रही है — सही समय पर BAT दबाएँ');
- // bowler run-up animation start
- bowlerRunup=0;
 }
-let bowlerRunup=0;
 
 function requestHit(){
  if(phase==='flight' && !swingRequested){
    swingRequested=true;
    swingP = delivery ? delivery.t/delivery.duration : 0;
-   vibrate(15);
+   batter.userData.anim='swing';
+   batter.userData.animT=0;
+   if(navigator.vibrate) try{navigator.vibrate(15);}catch(e){}
  }
 }
 function requestDefend(){
- if(phase==='flight'){ defendRequested=true; vibrate(10); }
+ if(phase==='flight'){ defendRequested=true; batter.userData.anim='defend'; batter.userData.animT=0; }
 }
-function vibrate(ms){ if(navigator.vibrate) try{navigator.vibrate(ms);}catch(e){} }
 
-// ---------- Core hit resolution ----------
+// ============================================================
+// RESOLVE HIT — realistic cricket outcomes
+// ============================================================
 function resolveHit(){
  if(!delivery || delivery.hit) return;
  delivery.hit=true;
 
- // timing window: perfect at p ≈ 0.78
  const p = delivery.t/delivery.duration;
  const timing = Math.abs(p - 0.78);
  let quality = Math.max(0, 1 - timing*3.6);
 
- if(defendRequested){ quality = Math.max(quality,.40); toast('डिफेंस!'); }
+ if(defendRequested){ quality = Math.max(quality,.40); }
  else if(!swingRequested){ quality = 0; }
 
- // line match bonus (aim vs delivery.line)
  const lineBonus = 1 - Math.min(1, Math.abs(aim - delivery.line) * .35);
  quality *= lineBonus;
 
@@ -355,183 +563,249 @@ function resolveHit(){
  else if(quality>.62){ runs = Math.random()<.55 ? 4 : 2; }
  else if(quality>.38){ runs = Math.random()<.6 ? 2 : 1; }
  else if(quality>.18){
-   // mis-hit → catch risk
-   if(Math.random()<.45){ wicket=true; outType='CAUGHT'; }
+   if(Math.random()<.55){ wicket=true; outType='CAUGHT'; }
    else runs=1;
  } else {
-   if(Math.random()<.55){ wicket=true; outType='BOWLED'; }
+   if(Math.random()<.60){ wicket=true; outType='BOWLED'; }
+   else if(Math.random()<.30){ wicket=true; outType='LBW'; }
  }
 
  if(wicket){
    wickets[batting]++;
-   toast(outType==='CAUGHT'?'CAUGHT! कैच!':'OUT! बोल्ड!');
+   wicketsSound: wicketSound();
+   toast(outType==='CAUGHT'?'CAUGHT! कैच!':(outType==='LBW'?'LBW! OUT!':'OUT! बोल्ड!'));
    setStatus('WICKET', outType);
+   if(outType==='CAUGHT'){
+     // celebratory fielder jumps
+     fielders.forEach(f=>{ f.userData.anim='celebrate'; f.userData.animT=0; });
+   }
  } else {
    score[batting] += runs;
-   if(runs===6) toast('SIX! 🏏');
-   else if(runs===4) toast('FOUR!');
-   else if(runs===0) toast('DOT BALL');
+   if(runs===6){ toast('SIX! 🏏'); crowdCheer(0.9); }
+   else if(runs===4){ toast('FOUR!'); crowdCheer(0.7); }
+   else if(runs===0){ toast('DOT BALL'); }
    else toast(runs+' RUN');
    setStatus(runs>=4?'BOUNDARY':'RUNS', runs+' रन');
-   // Trigger post-hit ball flight for visual satisfaction
+   if(runs>0) batHitSound();
    launchBallAfterHit(runs, quality);
  }
  balls[batting]++;
  updateHUD();
  phase='result';
 
- // end-of-innings early chase win check
  setTimeout(()=>{
    if(!running)return;
    if(innings===1 && score[1]>=target){ finishMatch(); return; }
    nextBall();
- }, 1350);
+ }, 1400);
 }
 function launchBallAfterHit(runs, q){
  postHit=true; postHitTime=0;
- // launch ball with direction based on aim + shot quality
  const dirX = aim * 0.9 + rand(-.3,.3);
  const power = runs===6 ? 22 : runs===4 ? 17 : runs===2 ? 11 : 8;
- ballVel.set(dirX, runs>=4?10:6, -power); // z negative = toward fielders/away
+ ballVel.set(dirX, runs>=4?10:6, -power);
  ballMesh.position.set(0,1.1,9.2);
  ballMesh.visible=true;
 }
 
-// ---------- Innings / match end ----------
+// ============================================================
+// INNINGS / MATCH
+// ============================================================
 function endInnings(){
  if(innings===0){
    target=score[0]+1; innings=1; batting=1;
-   toast('INNINGS BREAK');
+   toast('INNINGS BREAK'); crowdCheer(1.2);
    updateHUD();
    setStatus('PAKISTAN CHASE','लक्ष्य '+target+' रन');
+   // swap fielders to IND colors for PAK batting
+   fielders.forEach(f=>{
+     f.children.forEach(c=>{
+       if(c.material && c.material.color && Math.abs(c.material.color.getHex()-TEAMS[1].shirt)<0x1000){
+         c.material.color.setHex(TEAMS[0].shirt);
+       }
+     });
+   });
    setTimeout(()=>{ nextBall(); }, 1500);
  } else finishMatch();
 }
 function finishMatch(){
  running=false; phase='finished';
- let winner = score[0]===score[1] ? -1 : (score[0]>score[1]?0:1);
+ const winner = score[0]===score[1] ? -1 : (score[0]>score[1]?0:1);
  const title = winner<0 ? 'MATCH TIED' : (TEAMS[winner].flag+' '+TEAMS[winner].name+' WON!');
+ if(winner>=0) crowdCheer(2.0);
  $('dialog').innerHTML = `
    <div class="logo">FULL TIME • U-19</div>
    <h1>${title}</h1>
-   <p><b>INDIA ${score[0]}/${wickets[0]}</b><br>PAKISTAN ${score[1]}/${wickets[1]}</p>
+   <p><b>INDIA ${score[0]}/${wickets[0]} (${Math.floor(balls[0]/6)}.${balls[0]%6})</b><br>PAKISTAN ${score[1]}/${wickets[1]} (${Math.floor(balls[1]/6)}.${balls[1]%6})</p>
    <p>${winner<0?'शानदार मुकाबला — टाई!':(winner===0?'भारत जीता!':'पाकिस्तान जीता!')}</p>
    <button class="bigbtn" id="again">फिर से खेलें</button>
    <button class="bigbtn subbtn" id="close">स्कोर देखें</button>`;
  $('overlay').style.display='flex';
- $('again').onclick=startMatch;
+ $('again').onclick=()=>{ $('overlay').style.display='none'; startMatch(); };
  $('close').onclick=()=>{ $('overlay').style.display='none'; };
  setStatus('MATCH OVER','अंतिम परिणाम');
  toast(title);
 }
 
-// ---------- Animation loop ----------
-let lastSwingT=0;
+// ============================================================
+// ANIMATION LOOP
+// ============================================================
+let ballsState={t:0};
 function animate(){
  requestAnimationFrame(animate);
  const dt=Math.min(clock.getDelta(),.04);
  const now=performance.now()*.001;
 
- // toast fade
  if(lastToast>0){ lastToast-=dt; if(lastToast<=0)$('toast').style.opacity=0; }
 
- // bowler run-up (short, then delivery)
- if(phase==='flight' && bowlerRunup<1){
-   bowlerRunup=Math.min(1,bowlerRunup+dt*1.6);
-   bowler.position.z = -9.2 + bowlerRunup*2.0;
-   bowler.position.x = Math.sin(now*6)*.15*(1-bowlerRunup);
-   bowler.rotation.z = Math.sin(bowlerRunup*Math.PI*2)*.10;
-   bowler.userData.armR.rotation.x = -bowlerRunup*2.8; // arm swing
- }
+ // ---- Player idle / walk / fielder animations ----
+ playersAll.forEach(pl=>{
+   const u=pl.userData;
+   u.animT+=dt;
+   const walk=Math.sin(u.animT*6)*0.08;
+   if(u.anim==='runup'){
+     // bowler run-up + arm circle
+     bowlerRunup=Math.min(1,bowlerRunup+dt*2.2);
+     pl.position.z=-9.4+bowlerRunup*2.4;
+     pl.position.x=Math.sin(bowlerRunup*Math.PI*2)*.18*(1-bowlerRunup);
+     u.legL.rotation.x=Math.sin(u.animT*14)*0.5;
+     u.legR.rotation.x=-Math.sin(u.animT*14)*0.5;
+     u.armR.rotation.x=-bowlerRunup*3.0;
+     u.armL.rotation.x=bowlerRunup*0.8;
+   }else if(u.anim==='swing'){
+     // batter swing arc
+     u.animT+=0; // already
+     const s=Math.min(1,u.animT*3.5);
+     batGroup.rotation.x=-s*1.8;
+     batGroup.rotation.z=-s*.5;
+     pl.rotation.y=Math.PI+aim*.06+Math.sin(s*Math.PI)*.15;
+     u.armL.rotation.x=-s*.4;
+     u.armR.rotation.x=-s*.9;
+   }else if(u.anim==='defend'){
+     const s=Math.min(1,u.animT*4);
+     batGroup.rotation.x=-s*.4;
+     u.armR.rotation.x=-s*.3;
+   }else if(u.anim==='chase'){
+     // fielders running to ball
+     u.legL.rotation.x=Math.sin(u.animT*14)*0.6;
+     u.legR.rotation.x=-Math.sin(u.animT*14)*0.6;
+     u.armL.rotation.x=-Math.sin(u.animT*14)*0.5;
+     u.armR.rotation.x=Math.sin(u.animT*14)*0.5;
+   }else if(u.anim==='celebrate'){
+     pl.position.y=Math.abs(Math.sin(u.animT*8))*0.2;
+     u.armL.rotation.x=-2.4;
+     u.armR.rotation.x=-2.4;
+   }else{
+     // idle: gentle sway
+     u.legL.rotation.x=walk*.3;
+     u.legR.rotation.x=-walk*.3;
+     u.armL.rotation.x=Math.sin(now*2)*.1;
+     u.armR.rotation.x=-Math.sin(now*2)*.1;
+     pl.position.y=0;
+   }
+ });
 
- // ball flight
+ // ---- BALL FLIGHT (pre-hit) ----
  if(delivery && phase==='flight' && !postHit){
    delivery.t+=dt;
    const p=Math.min(1, delivery.t/delivery.duration);
-   // timing bar
+
    $('timingbar').style.display='block';
    $('tfill').style.width=(p*100)+'%';
    $('tmark').style.left=((p/0.78)*78)+'%';
 
-   // z linear
    const z = delivery.zStart + p*(delivery.zEnd - delivery.zStart);
-   // y: rising throw, then gravity, then bounce
-   const bounceP = Math.min(1, (z - (-2)) / (delivery.zEnd - (-2)));
    let y;
    if(z < delivery.bounceZ){
-     // pre-bounce: arc from release down to bounce height
-     const q = (z - delivery.zStart)/(delivery.bounceZ - delivery.zStart);
-     y = 0.55 + Math.sin(q*Math.PI)*0.35;
+     const q = (z - delivery.zStart)/Math.max(.01,(delivery.bounceZ - delivery.zStart));
+     y = 0.55 + Math.sin(q*Math.PI)*0.30;
    } else {
-     // post-bounce: rise + fall
      const q = (z - delivery.bounceZ)/Math.max(.1,(delivery.zEnd - delivery.bounceZ));
      y = 0.35 + Math.sin(Math.min(1,q)*Math.PI)*0.28;
    }
    ballMesh.position.set(delivery.line, y, z);
    ballMesh.rotation.x -= .35; ballMesh.rotation.z += .04;
 
-   // batter sway/aim indicator
-   batter.position.x = -aim * .15;
+   batter.position.x = -aim * .18;
    batter.rotation.y = Math.PI + aim * .08;
 
-   // swing
-   if(swingRequested && swingP!==null){
-     const sp = Math.min(1,(delivery.t/delivery.duration - swingP)*3.5);
-     batGroup.rotation.x = -sp*1.6;
-     batGroup.rotation.z = -sp*.4;
-   }
-
-   // trail
    ballTrail.forEach((t,i)=>{
      const q=Math.max(0,p-i*.03);
      const tz=delivery.zStart + q*(delivery.zEnd - delivery.zStart);
-     const tq = (tz - delivery.bounceZ);
-     t.position.set(delivery.line, y, tz);
-     t.position.z -= i*.05;
-     t.visible = p-i*.03 > 0;
-     t.scale.setScalar(Math.max(0,1-i*.13));
+     t.position.set(delivery.line, y, tz - i*.05);
+     t.visible = (p - i*.03) > 0;
+     t.scale.setScalar(Math.max(0,1 - i*.13));
    });
 
-   // resolve at good timing point
    if(p>=0.79 && !delivery.hit) resolveHit();
    if(p>=1){ delivery=null; $('timingbar').style.display='none'; ballTrail.forEach(t=>t.visible=false); }
  }
 
- // post-hit ball flight (visual)
+ // ---- POST-HIT BALL FLIGHT ----
  if(postHit){
    postHitTime+=dt;
    ballMesh.position.x += ballVel.x*dt;
    ballMesh.position.y += ballVel.y*dt;
    ballMesh.position.z += ballVel.z*dt;
    ballVel.y -= 18*dt;
-   // simple fielders react: chase ball
+
+   // FIELDERS CHASE
    fielders.forEach(f=>{
      const dx=ballMesh.position.x-f.position.x;
      const dz=ballMesh.position.z-f.position.z;
      const d=Math.hypot(dx,dz);
-     if(d<8 && d>0.1){
-       f.position.x += (dx/d)*dt*3.2;
-       f.position.z += (dz/d)*dt*3.2;
+     if(d<10 && d>0.3){
+       f.position.x += (dx/d)*dt*4.5;
+       f.position.z += (dz/d)*dt*4.5;
+       f.userData.anim='chase';
+       f.rotation.y=Math.atan2(-(ballMesh.position.x-f.position.x),-(ballMesh.position.z-f.position.z));
      }
-     f.rotation.y = Math.atan2(-(ballMesh.position.x-f.position.x), -(ballMesh.position.z-f.position.z));
+     // catch detection
+     if(d<0.9 && postHitTime>0.3 && !f.userData.caught){
+       f.userData.caught=true;
+       f.userData.anim='celebrate';
+       f.userData.animT=0;
+     }
    });
-   if(postHitTime>1.4 || ballMesh.position.y<-1){ postHit=false; }
+
+   if(postHitTime>1.6 || ballMesh.position.y<-2){ postHit=false; }
  }
+
+ // ---- CROWD subtle sway ----
+ crowdMeshes.forEach(m=>{ m.rotation.y=Math.sin(now*.15)*0.005; });
+
+ // ---- CAMERA: gentle follow with slight bob ----
+ camera.position.x=Math.sin(now*.25)*0.3;
+ camera.lookAt(0,1.2,-1);
 
  renderer.render(scene,camera);
 }
 
-// ---------- Controls ----------
+// ============================================================
+// CONTROLS
+// ============================================================
 function bindControls(){
  $('start').onclick=startMatch;
- const hitBtn=$('hit');
- hitBtn.addEventListener('pointerdown',e=>{e.preventDefault();requestHit();},{passive:false});
- $('defend').addEventListener('pointerdown',e=>{e.preventDefault();requestDefend();},{passive:false});
- $('left').addEventListener('pointerdown',e=>{e.preventDefault();aim=Math.max(-1.5,aim-.5);toast('लेग साइड');updateAimLabel();},{passive:false});
- $('right').addEventListener('pointerdown',e=>{e.preventDefault();aim=Math.min(1.5,aim+.5);toast('ऑफ साइड');updateAimLabel();},{passive:false});
 
- // swipe on canvas: swipe left/right = aim, swipe up = hit, swipe down = defend
- let touchStartX=0, touchStartY=0, touchTime=0;
+ const hitBtn=$('hit');
+ hitBtn.addEventListener('pointerdown',e=>{e.preventDefault();uiClick();requestHit();},{passive:false});
+ $('defend').addEventListener('pointerdown',e=>{e.preventDefault();uiClick();requestDefend();},{passive:false});
+ $('left').addEventListener('pointerdown',e=>{e.preventDefault();uiClick();aim=Math.max(-1.5,aim-.5);toast('लेग साइड');updateAimLabel();},{passive:false});
+ $('right').addEventListener('pointerdown',e=>{e.preventDefault();uiClick();aim=Math.min(1.5,aim+.5);toast('ऑफ साइड');updateAimLabel();},{passive:false});
+
+ // sound toggle
+ $('soundbtn').onclick=()=>{
+   soundOn=!soundOn;
+   $('soundbtn').textContent=soundOn?'🔊':'🔇';
+   if(audioCtx){
+     if(soundOn){ if(crowdGain)crowdGain.gain.value=0.055; }
+     else{ if(crowdGain)crowdGain.gain.value=0; }
+   }
+   if(soundOn) initAudio();
+ };
+
+ // swipe on canvas
+ let touchStartX=0,touchStartY=0,touchTime=0;
  const cv=renderer.domElement;
  cv.addEventListener('touchstart',e=>{
    if(e.touches.length===1){
@@ -544,18 +818,13 @@ function bindControls(){
    if(!e.changedTouches.length)return;
    const dx=e.changedTouches[0].clientX-touchStartX;
    const dy=e.changedTouches[0].clientY-touchStartY;
-   const dt=performance.now()-touchTime;
-   if(dt<500){
+   const dur=performance.now()-touchTime;
+   if(dur<520){
      if(Math.abs(dx)>Math.abs(dy)*1.3 && Math.abs(dx)>30){
-       // horizontal swipe = aim
-       aim=Math.max(-1.5,Math.min(1.5, aim + (dx>0? .5 : -.5)));
+       aim=Math.max(-1.5,Math.min(1.5, aim + (dx>0?.5:-.5)));
        toast(dx>0?'ऑफ साइड':'लेग साइड'); updateAimLabel();
-     } else if(dy<-40){
-       // swipe up = shot
-       requestHit();
-     } else if(dy>40){
-       requestDefend();
-     }
+     }else if(dy<-40){ requestHit(); }
+     else if(dy>40){ requestDefend(); }
    }
  },{passive:true});
 
@@ -565,10 +834,10 @@ function bindControls(){
    if(e.code==='ArrowLeft'){aim=Math.max(-1.5,aim-.5);updateAimLabel();}
    if(e.code==='ArrowRight'){aim=Math.min(1.5,aim+.5);updateAimLabel();}
    if(e.key.toLowerCase()==='d')requestDefend();
+   if(e.key.toLowerCase()==='m')$('soundbtn').click();
  });
 }
 
-// ---------- Boot ----------
 init();
 })();
 </script>
