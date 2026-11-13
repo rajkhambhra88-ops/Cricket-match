@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>IND vs PAK U-19 3D Cricket v6</title>
+<title>IND vs PAK U-19 3D Cricket v7</title>
 <style>
 :root{--gold:#ffd45a;--ink:#07131d;--panel:rgba(5,17,27,.9);--line:rgba(255,255,255,.18)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -62,7 +62,7 @@ h1{font-size:clamp(25px,6.5vw,40px);line-height:1.05;margin:9px 0}
 <button id="soundbtn">🔊</button>
 <div id="overlay">
  <div class="dialog" id="dialog">
-  <div class="logo">WORLD CRICKET • U-19 • v6</div>
+  <div class="logo">WORLD CRICKET • U-19 • v7</div>
   <h1>🇮🇳 INDIA<br><span style="color:#ffd45a">VS</span><br>🇵🇰 PAKISTAN</h1>
   <p><b>3D मोबाइल क्रिकेट मुकाबला</b><br>पूरा स्टेडियम • असली फील्डर • कैच और रन-आउट • स्टेडियम की आवाज़।<br>2 ओवर प्रति पारी • 3 विकेट</p>
   <button class="bigbtn" id="start">टॉस और मैच शुरू करें</button>
@@ -118,7 +118,7 @@ function initAudio(){
 function beep(f,d,v,t){ if(!audioCtx||!soundOn)return; let o=audioCtx.createOscillator(),g=audioCtx.createGain(); o.type=t||'sine'; o.frequency.value=f; g.gain.setValueAtTime(v,audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+d); o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime+d); }
 function crowdCheer(d){ if(!audioCtx||!soundOn||!crowdGain)return; let t=audioCtx.currentTime; crowdGain.gain.cancelScheduledValues(t); crowdGain.gain.setValueAtTime(0.05,t); crowdGain.gain.linearRampToValueAtTime(0.4,t+0.15); crowdGain.gain.exponentialRampToValueAtTime(0.05,t+d); }
 
-// MATERIALS & HELPERS (FIXED PARENT)
+// MATERIALS & HELPERS (Perfectly linked to Parent)
 const mat=(c,r=.75)=>new THREE.MeshStandardMaterial({color:c,roughness:r});
 function box(w,h,d,m,x,y,z,p){let o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);o.position.set(x,y,z);p.add(o);return o;}
 function cyl(rt,rb,h,m,x,y,z,p,s){s=s||10;let o=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,s),m);o.position.set(x,y,z);p.add(o);return o;}
@@ -150,6 +150,10 @@ function makeHuman(shirt, pant, role){
 // STADIUM
 function buildStadium(){
  let ground=new THREE.Mesh(new THREE.CircleGeometry(44,48),mat(0x287c43,.9)); ground.rotation.x=-Math.PI/2; ground.position.y=-.06; scene.add(ground);
+ 
+ let innerGrass = new THREE.Mesh(new THREE.RingGeometry(28,31,48),mat(0x2f8f4e,.9));
+ innerGrass.rotation.x=-Math.PI/2; innerGrass.position.y=-0.05; scene.add(innerGrass);
+
  box(7,.08,26,mat(0x9c8059),0,.02,0,scene);
  box(3.2,.12,24,mat(0xc6a77a),0,.09,0,scene);
  for(const z of [-9.5,9.5]) box(4,.025,.12,mat(0xffffff),0,.17,z,scene);
@@ -165,29 +169,75 @@ function buildStadium(){
 }
 
 function init(){
- scene=new THREE.Scene(); scene.background=new THREE.Color(0x78b7d7); scene.fog=new THREE.Fog(0x78b7d7,55,140);
- // Camera position to see full pitch and players clearly
- camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,.1,220); camera.position.set(0,8,18); camera.lookAt(0,1,-2);
- renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'}); renderer.setPixelRatio(Math.min(devicePixelRatio,1.5)); renderer.setSize(innerWidth,innerHeight); renderer.shadowMap.enabled=true; $('game').appendChild(renderer.domElement);
+ scene=new THREE.Scene(); 
+ scene.background=new THREE.Color(0x78b7d7); 
+ scene.fog=new THREE.Fog(0x78b7d7,55,140);
  
+ camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,.1,220); 
+ camera.position.set(0,8,18); 
+ camera.lookAt(0,1,-2);
+ 
+ renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'}); 
+ renderer.setPixelRatio(Math.min(devicePixelRatio,1.5)); 
+ renderer.setSize(innerWidth,innerHeight); 
+ renderer.shadowMap.enabled=true; 
+ $('game').appendChild(renderer.domElement);
+ 
+ // LIGHTS (Fixed syntax here!)
  scene.add(new THREE.HemisphereLight(0xeaf8ff,0x35512e,1.6));
- let sun=new THREE.DirectionalLight(0xffffff,1.8); sun.position.set(-12,22,15); sun.castShadow=true; sun.shadow.mapSize.set(512,512); scene.add(sun);
+ let sun=new THREE.DirectionalLight(0xffffff,1.8); 
+ sun.position.set(-12,22,15); 
+ sun.castShadow=true; 
+ sun.shadow.mapSize.set(512,512); 
+ sun.shadow.camera.left=-20; sun.shadow.camera.right=20;
+ sun.shadow.camera.top=20; sun.shadow.camera.bottom=-20;
+ scene.add(sun);
 
  buildStadium();
 
- batter=makeHuman(TEAMS[0].shirt,TEAMS[0].pant,'batter'); batter.position.set(0,0,8.3); batter.rotation.y=Math.PI; scene.add(batter); playersAll.push(batter);
- batGroup=new THREE.Group(); cyl(.03,.035,.34,mat(0x222222),0,-.17,0,batGroup,6); box(.12,1.0,.14,mat(0xd5b06a),0,-.9,0,batGroup); batGroup.position.set(.42,1.35,.10); batter.add(batGroup);
+ // Players
+ batter=makeHuman(TEAMS[0].shirt,TEAMS[0].pant,'batter'); 
+ batter.position.set(0,0,8.3); 
+ batter.rotation.y=Math.PI; 
+ scene.add(batter); 
+ playersAll.push(batter);
+
+ batGroup=new THREE.Group(); 
+ cyl(.03,.035,.34,mat(0x222222),0,-.17,0,batGroup,6); 
+ box(.12,1.0,.14,mat(0xd5b06a),0,-.9,0,batGroup); 
+ batGroup.position.set(.42,1.35,.10); 
+ batter.add(batGroup);
  
- bowler=makeHuman(TEAMS[1].shirt,TEAMS[1].pant,'bowler'); bowler.position.set(0,0,-9.4); scene.add(bowler); playersAll.push(bowler);
+ bowler=makeHuman(TEAMS[1].shirt,TEAMS[1].pant,'bowler'); 
+ bowler.position.set(0,0,-9.4); 
+ scene.add(bowler); 
+ playersAll.push(bowler);
 
- FIELD_POS.forEach(p=>{ let f=makeHuman(TEAMS[1].shirt,TEAMS[1].pant,'fielder'); f.position.set(Math.sin(p.a)*p.r,0,Math.cos(p.a)*p.r); f.rotation.y=Math.atan2(-f.position.x,-f.position.z); f.userData.basePos=f.position.clone(); f.userData.homeRotY=f.rotation.y; scene.add(f); fielders.push(f); playersAll.push(f); });
+ FIELD_POS.forEach(p=>{ 
+   let f=makeHuman(TEAMS[1].shirt,TEAMS[1].pant,'fielder'); 
+   f.position.set(Math.sin(p.a)*p.r,0,Math.cos(p.a)*p.r); 
+   f.rotation.y=Math.atan2(-f.position.x,-f.position.z); 
+   f.userData.basePos=f.position.clone(); 
+   f.userData.homeRotY=f.rotation.y; 
+   scene.add(f); 
+   fielders.push(f); 
+   playersAll.push(f); 
+ });
 
- // Make ball slightly bigger and red for visibility
+ // Ball (Big and Red)
  ballMesh=sphere(.28,mat(0xd40000),0,.45,-9.4,scene,14);
  for(let i=0;i<8;i++){ let t=sphere(.12,mat(0xffffff),0,0,0,scene,6); t.visible=false; ballTrail.push(t); }
 
- clock=new THREE.Clock(); addEventListener('resize',()=>{ if(!renderer)return; camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
- bindControls(); animate();
+ clock=new THREE.Clock(); 
+ addEventListener('resize',()=>{ 
+   if(!renderer)return; 
+   camera.aspect=innerWidth/innerHeight; 
+   camera.updateProjectionMatrix(); 
+   renderer.setSize(innerWidth,innerHeight); 
+ });
+ 
+ bindControls(); 
+ animate();
 }
 
 function toast(t){$('toast').textContent=t;$('toast').style.opacity=1;lastToast=1.2;}
@@ -250,6 +300,7 @@ function animate(){
   else if(u.anim==='swing'){ let s=Math.min(1,u.animT*3.5); batGroup.rotation.x=-s*1.8; pl.rotation.y=Math.PI+aim*.06; u.armR.rotation.x=-s*.9; }
   else if(u.anim==='chase'){ u.legL.rotation.x=Math.sin(u.animT*14)*.6; u.legR.rotation.x=-Math.sin(u.animT*14)*.6; }
   else if(u.anim==='celebrate'){ pl.position.y=Math.abs(Math.sin(u.animT*8))*.2; u.armL.rotation.x=-2.4; u.armR.rotation.x=-2.4; }
+  else { u.legL.rotation.x=0; u.legR.rotation.x=0; pl.position.y=0; }
  });
 
  if(delivery && phase==='flight' && !postHit){
