@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>IND vs PAK U-19 3D Cricket v3.1</title>
+<title>IND vs PAK U-19 3D Cricket v4</title>
 <style>
 :root{--gold:#ffd45a;--ink:#07131d;--panel:rgba(5,17,27,.9);--line:rgba(255,255,255,.18)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -62,7 +62,7 @@ h1{font-size:clamp(25px,6.5vw,40px);line-height:1.05;margin:9px 0}
 <button id="soundbtn">🔊</button>
 <div id="overlay">
  <div class="dialog" id="dialog">
-  <div class="logo">WORLD CRICKET • U-19 • v3.1</div>
+  <div class="logo">WORLD CRICKET • U-19 • v4</div>
   <h1>🇮🇳 INDIA<br><span style="color:#ffd45a">VS</span><br>🇵🇰 PAKISTAN</h1>
   <p><b>3D मोबाइल क्रिकेट मुकाबला</b><br>पूरा स्टेडियम • असली फील्डर • कैच और रन-आउट • स्टेडियम की आवाज़।<br>2 ओवर प्रति पारी • 3 विकेट</p>
   <button class="bigbtn" id="start">टॉस और मैच शुरू करें</button>
@@ -71,7 +71,7 @@ h1{font-size:clamp(25px,6.5vw,40px);line-height:1.05;margin:9px 0}
 </div>
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <script>
-(() => {
+document.addEventListener('DOMContentLoaded', () => {
 "use strict";
 const $=id=>document.getElementById(id);
 
@@ -106,7 +106,7 @@ const FIELD_POS=[
 ];
 
 // ============================================================
-// AUDIO ENGINE (WebAudio — no external files)
+// AUDIO ENGINE
 // ============================================================
 let audioCtx=null;
 let crowdGain=null, crowdNodes=[];
@@ -178,7 +178,7 @@ function wicketSound(){
 function uiClick(){ if(!audioCtx||!soundOn)return; beep(660,0.05,0.12,'sine'); }
 
 // ============================================================
-// MATERIALS & HUMAN MODEL FACTORY
+// MATERIALS & HUMAN MODEL
 // ============================================================
 const mat=(c,r=.75)=>new THREE.MeshStandardMaterial({color:c,roughness:r});
 function box(w,h,d,m,x,y,z,parent){const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);o.position.set(x,y,z);parent.add(o);return o;}
@@ -193,7 +193,6 @@ function makeHuman(shirtColor, pantColor, role){
  const cloth=mat(shirtColor,.68);
  const pant=mat(pantColor,.7);
  const shoeM=mat(0x111418,.5);
- const white=mat(0xf0f0f0,.6);
  const hairM=mat(0x1a1410,.9);
  const helmetM=mat(0x15243f,.45);
  const gloveM=mat(0xdfe6ec,.5);
@@ -238,9 +237,7 @@ function makeHuman(shirtColor, pantColor, role){
  box(.17,.11,.32,shoeM,-.13,.055,.06,g);
  box(.17,.11,.32,shoeM,.13,.055,.06,g);
 
- g.userData={role, armL, armR, legL, legR, torso, head,
-   baseY:0, anim:'idle', animT:0,
-   homePos:new THREE.Vector3(), homeRotY:0 };
+ g.userData={role, armL, armR, legL, legR, torso, head, anim:'idle', animT:0, caught:false};
  return g;
 }
 
@@ -278,8 +275,8 @@ function buildStadium(){
  roof.rotation.x=Math.PI/2; roof.position.y=11; scene.add(roof);
 
  const crowdColors=[0xe35b4e,0xeeeeee,0x264c85,0xffd45a,0x59b06e,0xb05a9e,0x3d7dbb];
- const crowdCount=1500;
- const geo=new THREE.SphereGeometry(.16,6,4);
+ const crowdCount=1200; // Optimized for mobile
+ const geo=new THREE.SphereGeometry(.16,5,4);
  const crowdMat=new THREE.MeshLambertMaterial({color:0xffffff});
  const inst=new THREE.InstancedMesh(geo,crowdMat,crowdCount);
  const dummy=new THREE.Object3D();
@@ -307,9 +304,6 @@ function buildStadium(){
   cyl(.22,.30,20,towerMat,px,10,pz,scene,6);
   box(2.6,.5,1.1,lightMat,px,20,pz);
   box(2.6,.5,1.1,lightMat,px,18.6,pz);
-  const pl=new THREE.PointLight(0xffeecc,0.5,45);
-  pl.position.set(px,18,pz);
-  scene.add(pl);
  }
  scene.add(new THREE.DirectionalLight(0xfff2cc,0.6));
 }
@@ -327,7 +321,7 @@ function init(){
  camera.lookAt(0,1,-2);
 
  renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
- renderer.setPixelRatio(Math.min(devicePixelRatio,1.7));
+ renderer.setPixelRatio(Math.min(devicePixelRatio,1.5)); // Optimized
  renderer.setSize(innerWidth,innerHeight);
  renderer.shadowMap.enabled=true;
  renderer.shadowMap.type=THREE.PCFSoftShadowMap;
@@ -348,8 +342,6 @@ function init(){
  batter=makeHuman(TEAMS[0].shirt,TEAMS[0].pant,'batter');
  batter.position.set(0,0,8.3);
  batter.rotation.y=Math.PI; 
- batter.userData.homePos.copy(batter.position);
- batter.userData.homeRotY=Math.PI;
  scene.add(batter);
  playersAll.push(batter);
 
@@ -361,7 +353,6 @@ function init(){
 
  bowler=makeHuman(TEAMS[1].shirt,TEAMS[1].pant,'bowler');
  bowler.position.set(0,0,-9.4);
- bowler.userData.homePos.set(0,0,-9.4);
  scene.add(bowler);
  playersAll.push(bowler);
 
@@ -369,11 +360,8 @@ function init(){
   const f=makeHuman(TEAMS[1].shirt,TEAMS[1].pant,'fielder');
   f.position.set(Math.sin(p.a)*p.r, 0, Math.cos(p.a)*p.r);
   f.rotation.y=Math.atan2(-f.position.x,-f.position.z);
-  f.userData.homePos.copy(f.position);
-  f.userData.homeRotY=f.rotation.y;
   f.userData.basePos=f.position.clone();
-  f.userData.homeAngle=p.a;
-  f.userData.homeR=p.r;
+  f.userData.homeRotY=f.rotation.y;
   scene.add(f);
   fielders.push(f);
   playersAll.push(f);
@@ -404,7 +392,7 @@ function resize(){
 }
 
 // ============================================================
-// HUD
+// HUD & MATCH FLOW
 // ============================================================
 function toast(t){$('toast').textContent=t;$('toast').style.opacity=1;lastToast=1.2;}
 function updateHUD(){
@@ -420,9 +408,6 @@ function updateAimLabel(){
  $('aimindicator').textContent='दिशा: '+l+' ('+aim.toFixed(1)+')';
 }
 
-// ============================================================
-// MATCH FLOW
-// ============================================================
 function startMatch(){
  initAudio();
  score=[0,0]; wickets=[0,0]; balls=[0,0];
@@ -454,11 +439,12 @@ function nextBall(){
    f.position.copy(f.userData.basePos);
    f.rotation.y=f.userData.homeRotY;
    f.userData.anim='idle';
-   f.userData.caught=false; // RESET CATCH FLAG
+   f.userData.caught=false; // RESET CATCH
  });
 
  batter.position.set(0,0,8.3);
  batter.rotation.set(0,Math.PI,0);
+ batter.userData.anim='idle';
 
  setStatus('NEXT BALL',`${TEAMS[batting].short} बल्लेबाजी • BAT का सही समय चुनें`);
  setTimeout(()=>{ if(running && phase==='ready') bowl(); }, 800);
@@ -478,8 +464,7 @@ function bowl(){
    t:0, duration: 1.35/pace,
    line, bounceZ,
    hit:false,
-   zStart:-9.4, zEnd:9.8,
-   yStart:.55,
+   zStart:-9.4, zEnd:9.8
  };
  bowler.userData.anim='runup';
  setStatus('BALL IN PLAY','गेंद आ रही है — सही समय पर BAT दबाएँ');
@@ -569,7 +554,6 @@ function endInnings(){
    updateHUD();
    setStatus('PAKISTAN CHASE','लक्ष्य '+target+' रन');
    
-   // FIX: Swap fielder colors for the second innings
    fielders.forEach(f=>{
      f.children.forEach(c=>{
        if(c.material){
@@ -776,7 +760,7 @@ function bindControls(){
 }
 
 init();
-})();
+});
 </script>
 </body>
 </html>
